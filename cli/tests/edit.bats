@@ -67,13 +67,13 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 check_manifest_unchanged() {
-  current_contents=$(cat "$MANIFEST_PATH")
-  [[ $current_contents == "$ORIGINAL_MANIFEST_CONTENTS" ]]
+  current_content=$(cat "$MANIFEST_PATH")
+  [[ $current_content == "$ORIGINAL_MANIFEST_CONTENT" ]]
 }
 
 check_manifest_updated() {
-  current_contents=$(cat "$MANIFEST_PATH")
-  [[ $current_contents == "$NEW_MANIFEST_CONTENTS" ]]
+  current_content=$(cat "$MANIFEST_PATH")
+  [[ $current_content == "$NEW_MANIFEST_CONTENT" ]]
 }
 
 # ---------------------------------------------------------------------------- #
@@ -97,7 +97,7 @@ EOF
 
 # bats test_tags=edit:manifest:file
 @test "'flox edit' accepts contents via filename" {
-  NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
+  NEW_MANIFEST_CONTENT="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
@@ -105,14 +105,14 @@ EOF
   assert_success
 
   WRITTEN="$(cat "$MANIFEST_PATH")"
-  assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENTS"
+  assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENT"
 }
 
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=edit:manifest:stdin
 @test "'flox edit' accepts contents via pipe to stdin" {
-  NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
+  NEW_MANIFEST_CONTENT="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
@@ -121,7 +121,7 @@ EOF
   # Get the contents as they appear in the actual manifest after the operation
   WRITTEN="$(cat "$MANIFEST_PATH")"
   # Assert that it's the same as the contents we supplied
-  assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENTS"
+  assert_equal "$WRITTEN" "$NEW_MANIFEST_CONTENT"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -130,7 +130,7 @@ EOF
 @test "'flox edit' fails with invalid contents supplied via filename" {
 
   "$FLOX_BIN" init
-  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+  ORIGINAL_MANIFEST_CONTENT="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
 
   cat "$EXTERNAL_MANIFEST_PATH" > ./manifest.toml
   echo "foo = " > ./manifest.toml
@@ -146,7 +146,7 @@ EOF
 @test "'flox edit' fails with invalid contents supplied via stdin" {
 
   "$FLOX_BIN" init
-  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+  ORIGINAL_MANIFEST_CONTENT="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
 
   run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
   assert_failure

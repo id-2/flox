@@ -1124,12 +1124,12 @@ impl From<&CatalogPackage> for InlineTable {
 /// coming from. For this reason we put them under the `<descriptor>.path` key
 /// rather than `<descriptor>.name`.
 pub fn insert_packages(
-    manifest_contents: &str,
+    manifest_content: &str,
     pkgs: &[PackageToInstall],
 ) -> Result<PackageInsertion, TomlEditError> {
     debug!("attempting to insert packages into manifest");
     let mut already_installed: HashMap<String, bool> = HashMap::new();
-    let manifest = manifest_contents
+    let manifest = manifest_content
         .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?;
 
@@ -1196,11 +1196,11 @@ pub fn insert_packages(
 
 /// Remove package names from the `[install]` table of a manifest
 pub fn remove_packages(
-    manifest_contents: &str,
+    manifest_content: &str,
     pkgs: &[String],
 ) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
-    let mut toml = manifest_contents
+    let mut toml = manifest_content
         .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?
         .0;

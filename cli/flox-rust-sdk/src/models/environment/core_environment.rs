@@ -383,8 +383,8 @@ impl CoreEnvironment<ReadOnly> {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, CoreEnvironmentError> {
-        let current_manifest_contents = self.manifest_content()?;
-        let mut installation = insert_packages(&current_manifest_contents, packages)
+        let current_manifest_content = self.manifest_content()?;
+        let mut installation = insert_packages(&current_manifest_content, packages)
             .map(|insertion| InstallationAttempt {
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
                 already_installed: insertion.already_installed,
@@ -392,7 +392,7 @@ impl CoreEnvironment<ReadOnly> {
             })
             .map_err(CoreEnvironmentError::ModifyToml)?;
         if let Some(ref new_manifest) = installation.new_manifest {
-            let store_path = self.transact_with_manifest_contents(new_manifest, flox)?;
+            let store_path = self.transact_with_manifest_content(new_manifest, flox)?;
             installation.store_path = Some(store_path);
         }
         Ok(installation)
@@ -408,10 +408,10 @@ impl CoreEnvironment<ReadOnly> {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, CoreEnvironmentError> {
-        let current_manifest_contents = self.manifest_content()?;
-        let toml = remove_packages(&current_manifest_contents, &packages)
+        let current_manifest_content = self.manifest_content()?;
+        let toml = remove_packages(&current_manifest_content, &packages)
             .map_err(CoreEnvironmentError::ModifyToml)?;
-        let store_path = self.transact_with_manifest_contents(toml.to_string(), flox)?;
+        let store_path = self.transact_with_manifest_content(toml.to_string(), flox)?;
         Ok(UninstallationAttempt {
             new_manifest: Some(toml.to_string()),
             store_path: Some(store_path),
@@ -433,7 +433,7 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        let store_path = self.transact_with_manifest_contents(&contents, flox)?;
+        let store_path = self.transact_with_manifest_content(&contents, flox)?;
 
         EditResult::new(&old_contents, &contents, Some(store_path))
     }
@@ -846,14 +846,14 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Attempt to transactionally replace the manifest contents
     #[must_use = "don't discard the store path of built environments"]
-    fn transact_with_manifest_contents(
+    fn transact_with_manifest_content(
         &mut self,
-        manifest_contents: impl AsRef<str>,
+        manifest_content: impl AsRef<str>,
         flox: &Flox,
     ) -> Result<PathBuf, CoreEnvironmentError> {
         // Return an error for deprecated modifications of v0 manifests
         if flox.catalog_client.is_some() {
-            let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
+            let manifest: TypedManifest = toml::from_str(manifest_content.as_ref())
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
             if let TypedManifest::Pkgdb(_) = manifest {
                 Err(CoreEnvironmentError::Version0NotSupported)?;
@@ -871,7 +871,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating manifest");
-        temp_env.update_manifest(&manifest_contents)?;
+        temp_env.update_manifest(&manifest_content)?;
 
         debug!("transaction: locking environment");
         temp_env.lock(flox)?;
@@ -890,7 +890,7 @@ impl CoreEnvironment<ReadOnly> {
     /// so that calling `pkgdb manifest lock` with the new lockfile_contents is
     /// idempotent.
     ///
-    /// TODO: this is separate from transact_with_manifest_contents because it
+    /// TODO: this is separate from transact_with_manifest_content because it
     /// shouldn't have to call lock. Currently build calls lock, but we
     /// shouldn't have to lock a second time.
     #[must_use = "don't discard the store path of built environments"]
@@ -938,7 +938,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         if migration_info.needs_manifest_migration {
-            Self::migrate_manifest_contents_to_v1(&mut migration_info.raw_manifest)?;
+            Self::migrate_manifest_content_to_v1(&mut migration_info.raw_manifest)?;
 
             debug!("migration transaction: updating manifest");
             temp_env.update_manifest(migration_info.raw_manifest.to_string())?;
@@ -971,7 +971,7 @@ impl CoreEnvironment<ReadOnly> {
     /// Return an error if the resulting manifest is not a valid v1 manifest.
     /// Note that the modifications are still made even if an error is returned to allow
     /// [Self::migrate_and_edit_unsafe] to use the invalid manifest.
-    fn migrate_manifest_contents_to_v1(
+    fn migrate_manifest_content_to_v1(
         raw_manifest: &mut RawManifest,
     ) -> Result<(), CoreEnvironmentError> {
         // // Insert `version = 1`
@@ -1025,7 +1025,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut raw_manifest = RawManifest::from_str(&contents)
             .map_err(|e| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(e)))?;
 
-        let migrate_result = Self::migrate_manifest_contents_to_v1(&mut raw_manifest);
+        let migrate_result = Self::migrate_manifest_content_to_v1(&mut raw_manifest);
 
         debug!("migration transaction: updating manifest");
         temp_env.update_manifest(raw_manifest.to_string())?;
@@ -1450,7 +1450,7 @@ mod tests {
     #[serial]
     fn build_incompatible_package() {
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
+        let manifest_content = formatdoc! {r#"
         [install]
         glibc.pkg-path = "glibc"
 
@@ -1459,7 +1459,7 @@ mod tests {
         "#};
 
         #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
+        let manifest_content = formatdoc! {r#"
         [install]
         glibc.pkg-path = "glibc"
 
@@ -1468,7 +1468,7 @@ mod tests {
         "#};
 
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
+        let manifest_content = formatdoc! {r#"
         [install]
         ps.pkg-path = "darwin.ps"
 
@@ -1477,7 +1477,7 @@ mod tests {
         "#};
 
         #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
+        let manifest_content = formatdoc! {r#"
         [install]
         ps.pkg-path = "darwin.ps"
 
@@ -1489,7 +1489,7 @@ mod tests {
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
-        temp_env.update_manifest(&manifest_contents).unwrap();
+        temp_env.update_manifest(&manifest_content).unwrap();
         temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
@@ -1857,7 +1857,7 @@ mod tests {
         }
     }
 
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
+    /// [CoreEnvironment::migrate_manifest_content_to_v1] migrates a manifest
     /// with `script` in a `[hook]` table correctly, maintaining comments and
     /// formatting.
     #[test]
@@ -1875,7 +1875,7 @@ mod tests {
             [options]
             "#};
         let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
+        CoreEnvironment::migrate_manifest_content_to_v1(&mut raw_manifest).unwrap();
         assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
                 version = 1
                 [vars]
@@ -1892,7 +1892,7 @@ mod tests {
         });
     }
 
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
+    /// [CoreEnvironment::migrate_manifest_content_to_v1] migrates a manifest
     /// with hook.script as a dotted key correctly, maintaining comments and
     /// formatting.
     #[test]
@@ -1907,7 +1907,7 @@ mod tests {
             options.allow.unfree = false
             "#};
         let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
+        CoreEnvironment::migrate_manifest_content_to_v1(&mut raw_manifest).unwrap();
         assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
                 vars.foo = "bar"
 
@@ -1922,7 +1922,7 @@ mod tests {
     }
 
     /// If a manifest contains both `hook.script` and `hook.on-activate`,
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] returns an error.
+    /// [CoreEnvironment::migrate_manifest_content_to_v1] returns an error.
     #[test]
     fn migrate_script_skip_for_on_activate() {
         let contents = formatdoc! {r#"
@@ -1931,7 +1931,7 @@ mod tests {
             on-activate = "echo bar"
             "#};
         let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        let err = CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
+        let err = CoreEnvironment::migrate_manifest_content_to_v1(&mut raw_manifest).unwrap_err();
         assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
                 version = 1
                 [hook]
@@ -1947,7 +1947,7 @@ mod tests {
     }
 
     /// Even if a manifest fails validation, it is still modified by
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1].
+    /// [CoreEnvironment::migrate_manifest_content_to_v1].
     #[test]
     fn migrate_script_modifies_on_error() {
         let contents = formatdoc! {r#"
@@ -1957,7 +1957,7 @@ mod tests {
             "#};
         let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
         assert!(raw_manifest.get("version").is_none());
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
+        CoreEnvironment::migrate_manifest_content_to_v1(&mut raw_manifest).unwrap_err();
         assert_eq!(
             raw_manifest.get("version").unwrap().as_integer().unwrap(),
             1

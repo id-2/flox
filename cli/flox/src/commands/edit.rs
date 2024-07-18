@@ -101,7 +101,7 @@ impl Edit {
                 let span = tracing::info_span!("edit_file");
                 let _guard = span.enter();
 
-                let contents = Self::provided_manifest_contents(file)?;
+                let contents = Self::provided_manifest_content(file)?;
 
                 Self::edit_manifest(&flox, &mut detected_environment, contents).await?
             },
@@ -252,7 +252,7 @@ impl Edit {
         let editor = Self::determine_editor()?;
 
         // Make a copy of the manifest for the user to edit so failed edits aren't left in
-        // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
+        // the original manifest. You can't put creation/cleanup inside the `edited_manifest_content`
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
         let tmp_manifest = tempfile::Builder::new()
@@ -272,7 +272,7 @@ impl Edit {
         // Let the user keep editing the file until the build succeeds or the user
         // decides to stop.
         loop {
-            let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
+            let new_manifest = Edit::edited_manifest_content(&tmp_manifest, &editor)?;
 
             let result = Dialog {
                 message: "Building environment to validate edit...",
@@ -341,7 +341,7 @@ impl Edit {
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
-    fn provided_manifest_contents(file: Option<PathBuf>) -> Result<Option<String>> {
+    fn provided_manifest_content(file: Option<PathBuf>) -> Result<Option<String>> {
         if let Some(ref file) = file {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
@@ -358,10 +358,7 @@ impl Edit {
     }
 
     /// Gets a new set of manifest contents after a user edits the file
-    fn edited_manifest_contents(
-        path: impl AsRef<Path>,
-        editor: impl AsRef<Path>,
-    ) -> Result<String> {
+    fn edited_manifest_content(path: impl AsRef<Path>, editor: impl AsRef<Path>) -> Result<String> {
         let mut command = Command::new(editor.as_ref());
         command.arg(path.as_ref());
 
