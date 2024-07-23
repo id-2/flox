@@ -1,6 +1,7 @@
 {
   bashInteractive,
   cacert,
+  coreutils,
   darwin,
   flox-activation-scripts,
   flox-pkgdb,
@@ -19,80 +20,17 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
-  writeShellScript,
+  writeShellApplication,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
   # This is a temporary build script that will be replaced by the
   # `flox build` command in the rust CLI.
-  flox-build = writeShellScript "flox-build" ''
-    # Abort on all non-zero exit codes.
-    set -e
-
-    # Assert script has been called with $FLOX_ENV set.
-    [ -n "$FLOX_ENV" ] || {
-      echo "ERROR: FLOX_ENV must be set to the path of the flox environment." 1>&2
-      exit 1
-    }
-
-    function build() {
-      script="$1"
-
-      # Infer pname from script path.
-      pname="$(basename "$script")"
-
-      # Eventually derive version from manifest.toml, but in the
-      # meantime, hardcode it.
-      version="0.0.0"
-
-      # Calculate name.
-      name="$pname-$version"
-
-      # calculate temp path of same strlen as eventual package storePath.
-      # TODO: make this stable, hashed on cwd + $FLOX_ENV for reuse
-      export out="/tmp/store_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-$name"
-
-      # Perform build script with activated environment
-      # TODO: eventually render the build-script to the rendered env.
-      # XXX: should we instead render build scripts with bash shebangs?
-      FLOX_TURBO=1 $FLOX_ENV/activate ${bashInteractive}/bin/bash "$script"
-
-      # Create new env layering results of build script with original env.
-      # Note: read name from manifest.toml (includes version)
-      nix-build \
-        --argstr name "$name" \
-        --argstr flox-env "$FLOX_ENV" \
-        --argstr install-prefix "$out" \
-        --out-link result-$name \
-        __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix
-    }
-
-    # Build list of packages to be built either from argv or as the
-    # set of all packages found in $FLOX_ENV/package-builds.d.
-    declare -a packages=()
-    if [ $# -gt 0 ]; then
-      while test $# -gt 0; do
-        if [ -f "$FLOX_ENV/package-builds.d/$1" ]; then
-          packages+=("$1")
-        else
-          echo "ERROR: $1 is not a valid package." 1>&2
-          exit 1
-        fi
-      done
-    else
-      packages=("$FLOX_ENV/package-builds.d"/*)
-    fi
-
-    # Build each package in the list.
-    # TODO: parallelize this in the rust version.
-    if [ ''${#packages[@]} -gt 0 ]; then
-      for package in "''${packages[@]}"; do
-        build "$package"
-      done
-    else
-      echo "No packages to build."
-    fi
-  '';
+  flox-build = lib.getExe (writeShellApplication {
+    name = "flox-build";
+    runtimeInputs = [bashInteractive coreutils gitMinimal nix];
+    text = builtins.readFile ./flox-build.bash;
+  });
 
   flox-src = builtins.path {
     name = "flox-src";
