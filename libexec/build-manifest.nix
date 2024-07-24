@@ -12,6 +12,7 @@
     if (srcdir == null)
     then null
     else builtins.fetchGit srcdir;
+  build-script-contents = /. + build-script;
 in
   pkgs.runCommand name {
     inherit src;
@@ -38,7 +39,7 @@ in
                source $stdenv/setup
                unpackPhase
         cd "$sourceRoot"
-               FLOX_TURBO=1 ${flox-env-package}/activate bash ${builtins.storePath build-script}
+               FLOX_TURBO=1 ${flox-env-package}/activate bash ${build-script-contents}
       ''
     )
     + ''
