@@ -7,11 +7,13 @@
   flox-pkgdb,
   gitMinimal,
   glibcLocalesUtf8,
+  gnumake,
   gnused,
   hostPlatform,
   inputs,
   installShellFiles,
   lib,
+  makeWrapper,
   nix,
   openssl,
   pkg-config,
@@ -23,14 +25,6 @@
   writeShellApplication,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
-
-  # This is a temporary build script that will be replaced by the
-  # `flox build` command in the rust CLI.
-  flox-build = lib.getExe (writeShellApplication {
-    name = "flox-build";
-    runtimeInputs = [bashInteractive coreutils gitMinimal nix];
-    text = builtins.readFile ./flox-build.bash;
-  });
 
   flox-src = builtins.path {
     name = "flox-src";
@@ -158,6 +152,7 @@ in
         ++ [
           installShellFiles
           gnused
+          makeWrapper
         ];
 
       # https://github.com/ipetkov/crane/issues/385
@@ -172,20 +167,27 @@ in
       #
       # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
       #   unclear about the root cause, so this is a hotfix.
-      postInstall = ''
-        installShellCompletion --cmd flox                         \
-          --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
-          --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
-          --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
+      postInstall =
+        ''
+          installShellCompletion --cmd flox                         \
+            --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
+            --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
+            --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
 
-        for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
-          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
-        done
-        cp ${flox-build} $out/bin/flox-build
-        substituteInPlace $out/bin/flox-build --replace __FLOX_CLI_OUTPATH__ $out
-        mkdir -p $out/libexec
-        cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
-      '';
+          for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
+            sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
+          done
+        ''
+        + ''
+          makeWrapper ${gnumake}/bin/make $out/bin/flox-build \
+            --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal nix]}" \
+            --add-flags "--makefile $out/libexec/flox-build.mk"
+                 mkdir -p $out/libexec
+                 cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
+                 cp ${../../libexec/flox-build.mk} $out/libexec/flox-build.mk
+          substituteInPlace $out/libexec/flox-build.mk \
+            --replace "__FLOX_CLI_OUTPATH__" "$out"
+        '';
 
       doInstallCheck = false;
       postInstallCheck = ''
