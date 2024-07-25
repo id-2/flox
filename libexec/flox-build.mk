@@ -56,26 +56,30 @@ define BUILD_template =
 
   # Render the build script with the package prerequisites replaced with their
   # corresponding outpaths.
-  $(eval $(_target)_build_script := $(shell mktemp --suffix=-build-$(_pname).bash))
+  $(eval $(_target)_build_script := $(shell mktemp --dry-run --suffix=-build-$(_pname).bash))
 
   # By the time this rule will be evaluated all of the package dependencies
-  # will have been added to the set of rule prerequisites in $$^, using their
+  # will have been added to the set of rule prerequisites in $^, using their
   # "safe" name (with "-" characters replaced with "_"), and these targets
   # will have successfully built the corresponding result-$(_pname) symlinks.
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
-  .PHONY: $($(_target)_build_script)
-  $($(_target)_build_script):
-	@echo "Rendering $(_pname) build script"
-	cp $(build) $$@
-	# TODO: perform mapping of underscore target names back to hyphenated package names
+  .INTERMEDIATE: $($(_target)_build_script)
+  $($(_target)_build_script): $(build)
+	@echo "Rendering $(_pname) build script to $$@"
+	cp $$< $$@
 	@set -x; for i in $$^; do \
-	  outpath="$$$$(readlink result-$$$$i)"; \
-	  sed -i "s/\$$$${$$$$i}/$$$$outpath/g" $$@; \
+	  if [ -L "$$$$i" ]; then \
+	    outpath="$$$$(readlink $$$$i)"; \
+	    if [ -n "$$$$outpath" ]; then \
+	      pkgname="$$$$(echo $$$$i | cut -d- -f2-)"; \
+	      sed -i "s%\$$$${$$$$pkgname}%$$$$outpath%g" $$@; \
+	    fi; \
+	  fi; \
 	done
 
   # Type 1 "manifest" build
-  .PHONY: $(_target)_manifest
+  .INTERMEDIATE: $(_target)_manifest
   $(_target)_manifest: $($(_target)_build_script)
 	@echo "Building $(_name) in manifest mode"
 	FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash $$<
@@ -88,7 +92,7 @@ define BUILD_template =
 	    --offline
 
   # Type 2 "impure" build
-  .PHONY: $(_target)_impure
+  .INTERMEDIATE: $(_target)_impure
   $(_target)_impure: $($(_target)_build_script)
 	@echo "Building $(_name) in impure mode"
 	@# First verify that the {ca,impure}-derivations features are enabled.
@@ -110,7 +114,7 @@ define BUILD_template =
 	    --impure
 
   # Type 3 "pure" build
-  .PHONY: $(_target)_pure
+  .INTERMEDIATE: $(_target)_pure
   $(_target)_pure: $($(_target)_build_script)
 	@echo "Building $(_name) in pure mode"
 	nix --extra-experimental-features nix-command \
@@ -122,12 +126,15 @@ define BUILD_template =
 	    --argstr build-script "$$<" \
 	    --out-link "result-$(_pname)"
 
-  # If we successfully built the package we can now remove the temporary
-  # build script that we created.
-  .PHONY: $(_target)
-  $(_target): $(_target)_$(_build_mode)
-	rm -f $($(_target)_build_script)
+  # Select the desired build mode as we declare the result symlink target.
+  result-$(_pname): $(_target)_$(_build_mode)
 
+  # Create a helper target for referring to the package by its name rather
+  # than the [real] result symlink we're looking to create.
+  $(_pname): result-$(_pname)
+
+  # Accumulate a list of known build targets for the "all" target.
+  all += $(_pname)
 endef
 
 $(foreach build,$(BUILDS),$(eval $(call BUILD_template)))
@@ -142,9 +149,9 @@ define DEPENDS_template =
   $(eval _target = $(subst -,_,$(_pname)))
   # Look for references to ${package} in the build script, and if found add
   # dependency from the target to the package.
-  $(if $(shell grep '\${$(package)}' $(build)),\
-    $(eval _dep = $(subst -,_,$(package)))\
-    $(eval $(_target)_build_script: $(_dep)))
+  $(if $(shell grep '\$${$(package)}' $(build)),\
+    $(eval _dep = result-$(package))\
+    $($(_target)_build_script): $(_dep))
 endef
 
 # Iterate over each possible {package,package} pair looking for dependencies,
@@ -154,6 +161,5 @@ $(foreach build,$(BUILDS),\
     $(if $(filter-out $(package),$(notdir $(build))),\
       $(eval $(call DEPENDS_template)))))
 
-# Finally, we create target stanzas that invoke the corresponding script in
-# each of the various modes, appending type suffix to target name.
-all: $(foreach build,$(BUILDS),$(subst -,_,$(notdir $(build))))
+# Finally, we create the "all" target to build all known packages.
+all: $(all)

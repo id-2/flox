@@ -181,10 +181,10 @@ in
         + ''
           makeWrapper ${gnumake}/bin/make $out/bin/flox-build \
             --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal nix]}" \
-            --add-flags "--makefile $out/libexec/flox-build.mk"
-                 mkdir -p $out/libexec
-                 cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
-                 cp ${../../libexec/flox-build.mk} $out/libexec/flox-build.mk
+            --add-flags "--no-builtin-rules --no-builtin-variables --makefile $out/libexec/flox-build.mk"
+          mkdir -p $out/libexec
+          cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
+          cp ${../../libexec/flox-build.mk} $out/libexec/flox-build.mk
           substituteInPlace $out/libexec/flox-build.mk \
             --replace "__FLOX_CLI_OUTPATH__" "$out"
         '';

@@ -20,7 +20,6 @@ in
     buildInputs = with pkgs; [flox-env-package gnutar gnused makeWrapper];
   } (
     ''
-      set -x
       mkdir -p $out
     ''
     + (
@@ -46,14 +45,19 @@ in
     )
     + ''
       # Wrap contents of files in bin with ${flox-env-package}/activate
+      set -x
       for prog in $out/bin/* $out/sbin/*; do
-        assertExecutable "$prog"
-        hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
-        mv "$prog" "$hidden"
-        makeShellWrapper "${flox-env-package}/activate" "$prog" \
-          --inherit-argv0 \
-          --set FLOX_ENV "${flox-env-package}" \
-          --add-flags "$hidden"
+	if [ -L "$prog" ]; then
+	  : # You cannot wrap a symlink, so just leave it be?
+        else
+          assertExecutable "$prog"
+          hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
+          mv "$prog" "$hidden"
+          makeShellWrapper "${flox-env-package}/activate" "$prog" \
+            --inherit-argv0 \
+            --set FLOX_ENV "${flox-env-package}" \
+            --add-flags "$hidden"
+        fi
       done
     ''
   )
