@@ -29,7 +29,7 @@ in
         # to the output directory, rewriting path references as we go.
         tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
           sed --binary "s%${install-prefix}%$out%g" | \
-          tar -C $out -xvvf -
+          tar -C $out -xf -
       ''
       else ''
         # If the build script is provided, then it's expected that we will
@@ -45,7 +45,6 @@ in
     )
     + ''
       # Wrap contents of files in bin with ${flox-env-package}/activate
-      set -x
       for prog in $out/bin/* $out/sbin/*; do
 	if [ -L "$prog" ]; then
 	  : # You cannot wrap a symlink, so just leave it be?

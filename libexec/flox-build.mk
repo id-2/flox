@@ -67,8 +67,8 @@ define BUILD_template =
   .INTERMEDIATE: $($(_target)_build_script)
   $($(_target)_build_script): $(build)
 	@echo "Rendering $(_pname) build script to $$@"
-	cp $$< $$@
-	@set -x; for i in $$^; do \
+	@cp $$< $$@
+	@for i in $$^; do \
 	  if [ -L "$$$$i" ]; then \
 	    outpath="$$$$(readlink $$$$i)"; \
 	    if [ -n "$$$$outpath" ]; then \
