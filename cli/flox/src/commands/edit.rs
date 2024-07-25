@@ -333,13 +333,14 @@ impl Edit {
     }
 
     /// Determines the editor to use for interactive editing, based on passed values
+    /// Returns the editor and a list of args to pass to the editor
     fn determine_editor_from_vars(
         visual_var: String,
         editor_var: String,
         path_var: String,
     ) -> Result<(PathBuf, Vec<String>)> {
         let var = if !visual_var.is_empty() {
-            visual_var
+        let var = if !visual_var.trim().is_empty() {
         } else {
             editor_var
         };
@@ -482,7 +483,7 @@ mod tests {
         let tmp3 = tempdir().expect("should create tempdir");
 
         let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
-            .expect("should path-join tmpdirs")
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path()))
             .into_string()
             .expect("should convert paths from OsString to String");
 
