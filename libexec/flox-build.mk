@@ -68,6 +68,7 @@ define BUILD_template =
   $($(_target)_build_script):
 	@echo "Rendering $(_pname) build script"
 	cp $(build) $$@
+	# TODO: perform mapping of underscore target names back to hyphenated package names
 	@set -x; for i in $$^; do \
 	  outpath="$$$$(readlink result-$$$$i)"; \
 	  sed -i "s/\$$$${$$$$i}/$$$$outpath/g" $$@; \
@@ -90,7 +91,14 @@ define BUILD_template =
   .PHONY: $(_target)_impure
   $(_target)_impure: $($(_target)_build_script)
 	@echo "Building $(_name) in impure mode"
-	nix --extra-experimental-features nix-command \
+	@# First verify that the {ca,impure}-derivations features are enabled.
+	@nix --extra-experimental-features nix-command \
+	  show-config experimental-features | grep -q ca-derivations || \
+	    (echo "ERROR: ca-derivations feature not enabled" 1>&2; exit 1)
+	@nix --extra-experimental-features nix-command \
+	  show-config experimental-features | grep -q impure-derivations || \
+	    (echo "ERROR: impure-derivations feature not enabled" 1>&2; exit 1)
+	nix --extra-experimental-features "nix-command impure-derivations" \
 	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr srcdir "$(realpath .)" \
@@ -98,6 +106,7 @@ define BUILD_template =
 	    --argstr install-prefix "$(_out)" \
 	    --argstr build-script "$$<" \
 	    --out-link "result-$(_pname)" \
+	    --arg __impure true \
 	    --impure
 
   # Type 3 "pure" build

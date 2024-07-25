@@ -3,6 +3,7 @@
   name,
   flox-env,
   install-prefix,
+  __impure ? false,
   srcdir ? null, # optional
   build-script ? null, # optional
 }: let
@@ -15,7 +16,7 @@
   build-script-contents = /. + build-script;
 in
   pkgs.runCommand name {
-    inherit src;
+    inherit __impure src;
     buildInputs = with pkgs; [flox-env-package gnutar gnused makeWrapper];
   } (
     ''
@@ -25,21 +26,22 @@ in
     + (
       if (build-script == null)
       then ''
-               # If no build script is provided copy the contents of install prefix
+        # If no build script is provided copy the contents of install prefix
         # to the output directory, rewriting path references as we go.
-               tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
-                 sed --binary "s%${install-prefix}%$out%g" | \
-                 tar -C $out -xvvf -
+        tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
+          sed --binary "s%${install-prefix}%$out%g" | \
+          tar -C $out -xvvf -
       ''
       else ''
-               # If the build script is provided, then it's expected that we will
+        # If the build script is provided, then it's expected that we will
         # invoke it from within the sandbox to write directly to $out. The
         # choice of pure or impure mode occurs outside of this script as
         # the derivation is instantiated.
-               source $stdenv/setup
-               unpackPhase
+        export NIX_ENFORCE_PURITY=${if __impure then "0" else "1"}
+        source $stdenv/setup
+        unpackPhase
         cd "$sourceRoot"
-               FLOX_TURBO=1 ${flox-env-package}/activate bash ${build-script-contents}
+        FLOX_TURBO=1 ${flox-env-package}/activate bash ${build-script-contents}
       ''
     )
     + ''
