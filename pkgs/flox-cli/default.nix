@@ -8,6 +8,7 @@
   gitMinimal,
   glibcLocalesUtf8,
   gnumake,
+  gnugrep,
   gnused,
   hostPlatform,
   inputs,
@@ -180,7 +181,7 @@ in
         ''
         + ''
           makeWrapper ${gnumake}/bin/make $out/bin/flox-build \
-            --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal nix]}" \
+            --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal gnugrep gnused nix]}" \
             --add-flags "--no-builtin-rules --no-builtin-variables --makefile $out/libexec/flox-build.mk"
           mkdir -p $out/libexec
           cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
