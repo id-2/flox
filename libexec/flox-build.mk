@@ -33,8 +33,11 @@ BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 define BUILD_template =
   # Infer pname from script path.
   $(eval _pname = $(notdir $(build)))
-  # Target names cannot have "-" in them so replace with "_" in the target name.
-  $(eval _target = $(subst -,_,$(_pname)))
+  # Variable names cannot have "-" in them so create a copy of _pname replacing
+  # "-" characters with "_".
+  $(eval _pvarname = $(subst -,_,$(_pname)))
+  # Identify result symlink basename.
+  $(eval _result = result-$(_pname))
   # Eventually derive version somehow, but hardcode it in the meantime.
   $(eval _version = 0.0.0)
   # Calculate name.
@@ -56,7 +59,7 @@ define BUILD_template =
 
   # Render the build script with the package prerequisites replaced with their
   # corresponding outpaths.
-  $(eval $(_target)_build_script := $(shell mktemp --dry-run --suffix=-build-$(_pname).bash))
+  $(eval $(_pvarname)_buildScript := $(shell mktemp --dry-run --suffix=-build-$(_pname).bash))
 
   # By the time this rule will be evaluated all of the package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -64,8 +67,8 @@ define BUILD_template =
   # will have successfully built the corresponding result-$(_pname) symlinks.
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
-  .INTERMEDIATE: $($(_target)_build_script)
-  $($(_target)_build_script): $(build)
+  .INTERMEDIATE: $($(_pvarname)_buildScript)
+  $($(_pvarname)_buildScript): $(build)
 	@echo "Rendering $(_pname) build script to $$@"
 	@cp $$< $$@
 	@for i in $$^; do \
@@ -78,9 +81,12 @@ define BUILD_template =
 	  fi; \
 	done
 
+  # Prepare temporary log file for capturing build output for inspection.
+  $(eval $(_pvarname)_logfile := $(shell mktemp --dry-run --suffix=-build-$(_pname).log))
+
   # Type 1 "manifest" build
-  .INTERMEDIATE: $(_target)_manifest
-  $(_target)_manifest: $($(_target)_build_script)
+  .INTERMEDIATE: $(_pname)_manifest
+  $(_pname)_manifest: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in manifest mode"
 	FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash $$<
 	nix --extra-experimental-features nix-command \
@@ -89,11 +95,11 @@ define BUILD_template =
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
 	    --out-link "result-$(_pname)" \
-	    --offline
+	    --offline 2>&1 | tee $($(_pvarname)_logfile)
 
   # Type 2 "impure" build
-  .INTERMEDIATE: $(_target)_impure
-  $(_target)_impure: $($(_target)_build_script)
+  .INTERMEDIATE: $(_pname)_impure
+  $(_pname)_impure: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in impure mode"
 	@# First verify that the {ca,impure}-derivations features are enabled.
 	@nix --extra-experimental-features nix-command \
@@ -102,36 +108,60 @@ define BUILD_template =
 	@nix --extra-experimental-features nix-command \
 	  show-config experimental-features | grep -q impure-derivations || \
 	    (echo "ERROR: impure-derivations feature not enabled" 1>&2; exit 1)
+	@# N.B. realpath returns empty string if path does not exist.
 	nix --extra-experimental-features "nix-command impure-derivations" \
 	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr srcdir "$(realpath .)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
-	    --argstr build-script "$$<" \
+	    --argstr buildScript "$$<" \
+	    --argstr buildCache "$(realpath $(_result)-buildCache)" \
 	    --out-link "result-$(_pname)" \
-	    --arg __impure true \
-	    --impure
+	    --impure \
+	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
+# --arg __impure true \ # CA derivations break multiple outputs - see https://github.com/NixOS/nix/issues/6383; don't need impure anymore with buildCache output
 
   # Type 3 "pure" build
-  .INTERMEDIATE: $(_target)_pure
-  $(_target)_pure: $($(_target)_build_script)
+  .INTERMEDIATE: $(_pname)_pure
+  $(_pname)_pure: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in pure mode"
+	@# N.B. realpath returns empty string if path does not exist.
 	nix --extra-experimental-features nix-command \
 	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr srcdir "$(realpath .)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
-	    --argstr build-script "$$<" \
-	    --out-link "result-$(_pname)"
+	    --argstr buildScript "$$<" \
+	    --argstr buildCache "$(realpath $(_result)-buildCache)" \
+	    --out-link "result-$(_pname)" 2>&1 | tee $($(_pvarname)_logfile)
+
+  # Type 4 "uncached pure" build
+  .INTERMEDIATE: $(_pname)_pure_nocache
+  $(_pname)_pure_nocache: $($(_pvarname)_buildScript)
+	@echo "Building $(_name) in pure mode (no cache)"
+	nix --extra-experimental-features nix-command \
+	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
+	    --argstr name "$(_name)" \
+	    --argstr srcdir "$(realpath .)" \
+	    --argstr flox-env "$(FLOX_ENV)" \
+	    --argstr install-prefix "$(_out)" \
+	    --argstr buildScript "$$<" \
+	    --out-link "result-$(_pname)" 2>&1 | tee $($(_pvarname)_logfile)
 
   # Select the desired build mode as we declare the result symlink target.
-  result-$(_pname): $(_target)_$(_build_mode)
+  $(_result): $(_pname)_$(_build_mode)
+	@# Take this opportunity to fail the build if we spot fatal errors in the log.
+	@if grep -q "flox build failed (caching build dir)" $($(_pvarname)_logfile); then \
+	  echo "ERROR: flox build failed (see $($(_pvarname)_logfile))" 1>&2; \
+	  rm -f $$@; \
+	  exit 1; \
+	fi
 
   # Create a helper target for referring to the package by its name rather
   # than the [real] result symlink we're looking to create.
-  $(_pname): result-$(_pname)
+  $(_pname): $(_result)
 
   # Accumulate a list of known build targets for the "all" target.
   all += $(_pname)
@@ -146,12 +176,12 @@ define DEPENDS_template =
   # Infer pname from script path.
   $(eval _pname = $(notdir $(build)))
   # Target names cannot have "-" in them so replace with "_" in the target name.
-  $(eval _target = $(subst -,_,$(_pname)))
+  $(eval _pvarname = $(subst -,_,$(_pname)))
   # Look for references to ${package} in the build script, and if found add
   # dependency from the target to the package.
   $(if $(shell grep '\$${$(package)}' $(build)),\
     $(eval _dep = result-$(package))\
-    $($(_target)_build_script): $(_dep))
+    $($(_pvarname)_buildScript): $(_dep))
 endef
 
 # Iterate over each possible {package,package} pair looking for dependencies,
