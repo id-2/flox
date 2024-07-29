@@ -107,30 +107,30 @@
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
-    # incremental build of thrid party crates
-    cargoDepsArtifacts = craneLib.buildDepsOnly {
-      pname = "flox-cli";
-      version = FLOX_VERSION;
+  # incremental build of thrid party crates
+  cargoDepsArtifacts = craneLib.buildDepsOnly {
+    pname = "flox-cli";
+    version = FLOX_VERSION;
 
-      src = craneLib.cleanCargoSource (craneLib.path flox-src);
+    src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
-      # runtime dependencies of the dependent crates
-      buildInputs =
-        [
-          # reqwest -> hyper -> openssl-sys
-          openssl.dev
-        ]
-        ++ lib.optional hostPlatform.isDarwin [
-          darwin.libiconv
-          darwin.apple_sdk.frameworks.SystemConfiguration
-        ];
-
-      nativeBuildInputs = [
-        pkg-config
+    # runtime dependencies of the dependent crates
+    buildInputs =
+      [
+        # reqwest -> hyper -> openssl-sys
+        openssl.dev
+      ]
+      ++ lib.optional hostPlatform.isDarwin [
+        darwin.libiconv
+        darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
-      inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
-    };
+    nativeBuildInputs = [
+      pkg-config
+    ];
+
+    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
+  };
 in
   craneLib.buildPackage ({
       pname = "flox-klaus";

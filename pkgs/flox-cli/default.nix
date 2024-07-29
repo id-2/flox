@@ -58,7 +58,7 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      KLAUS_BIN = 
+      KLAUS_BIN =
         if flox-klaus == null
         then "klaus"
         else "${flox-klaus}/bin/klaus";
