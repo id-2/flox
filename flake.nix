@@ -187,6 +187,12 @@
         rustfmt = rustfmt-nightly;
       };
 
+      # Watchdog executable
+      flox-klaus = callPackage ./pkgs/flox-klaus {
+        rust-toolchain = rust-toolchain;
+        # rustfmt = rustfmt-nightly;
+      };
+
       # Flox Command Line Interface Manpages
       flox-manpages = callPackage ./pkgs/flox-manpages {};
 
